@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>순범문고 도서 판매 관리 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 데이터베이스 제약조건 뱃지 스타일 */
+        .badge-pk { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+        .badge-fk { background-color: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+        .badge-null { background-color: #fffde7; color: #f57f17; border: 1px solid #fff59d; font-size: 0.7rem; padding: 2px 4px; border-radius: 4px; margin-left: 4px; }
+        .badge-notnull { background-color: #ffebee; color: #c62828; border: 1px solid #ffcdd2; font-size: 0.7rem; padding: 2px 4px; border-radius: 4px; margin-left: 4px; }
+        
+        /* 탭 스타일 */
+        .tab-active { border-bottom: 2px solid #9333ea; color: #9333ea; font-weight: bold; }
+        .tab-inactive { color: #6b7280; }
+        .tab-inactive:hover { color: #374151; }
+        
+        /* 사용자 레이아웃: 고정 사이드바 */
+        .user-sidebar { width: 280px; border-right: 1px solid #e5e7eb; }
+        
+        /* 하이라이트 스타일 */
+        .highlight { background-color: #fde047; color: #000; padding: 0 2px; border-radius: 2px; font-weight: bold; }
+
+        /* 모달 애니메이션 */
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <!-- ========================================== -->
+    <!-- 1. 사용자(고객) 모드 화면 -->
+    <!-- ========================================== -->
+    <section id="userView" class="flex flex-grow block h-screen overflow-hidden">
+        <!-- 왼쪽 고정 사이드바 -->
+        <aside class="user-sidebar bg-white shadow-sm flex flex-col p-6 z-40 h-full flex-shrink-0">
+            <div class="flex items-center gap-2 mb-8">
+                <span class="text-3xl">📚</span>
+                <h1 class="text-xl font-bold text-gray-900 leading-tight">순범문고<br>시스템</h1>
+            </div>
+            
+            <!-- 사이드바 고객 프로필 카드 -->
+            <div class="bg-gray-50 p-5 rounded-xl border border-gray-100 mb-8 flex-shrink-0">
+                <p class="text-sm text-gray-500 mb-1">현재 로그인 중인 고객</p>
+                <h2 class="text-lg font-bold text-gray-900 mb-1">이름이 (고객번호: 1)</h2>
+                <div class="text-sm text-gray-600 space-y-0.5">
+                    <p>📍 대한민국 용인</p>
+                    <p>📞 010-9278-9802</p>
+                </div>
+            </div>
+
+            <!-- 사이드바 세부 메뉴 -->
+            <nav id="userNavMenu" class="space-y-1.5 flex-grow">
+                <button id="navBtn-books" onclick="showUserSection('books')" class="w-full flex items-center justify-between gap-3 text-left p-3.5 rounded-lg bg-purple-50 text-purple-700 font-semibold group transition">
+                    <span>도서 목록</span>
+                    <span class="font-normal text-gray-400 group-hover:text-purple-500">&gt;</span>
+                </button>
+                <button id="navBtn-cart" onclick="showUserSection('cart')" class="w-full flex items-center justify-between gap-3 text-left p-3.5 rounded-lg text-gray-600 hover:bg-gray-100 group transition">
+                    <span>장바구니 <span id="sidebarCartCount" class="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full ml-1">0</span></span>
+                    <span class="font-normal text-gray-400 group-hover:text-gray-600">&gt;</span>
+                </button>
+                <button id="navBtn-history" onclick="showUserSection('history')" class="w-full flex items-center justify-between gap-3 text-left p-3.5 rounded-lg text-gray-600 hover:bg-gray-100 group transition">
+                    <span>내 주문내역</span>
+                    <span class="font-normal text-gray-400 group-hover:text-gray-600">&gt;</span>
+                </button>
+            </nav>
+            
+            <!-- 관리자 전환 버튼 -->
+            <button class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 mt-8" onclick="switchMainMode('admin')">
+                ⚙️ 관리자 화면으로
+            </button>
+        </aside>
+        
+        <!-- 오른쪽 메인 콘텐츠 영역 -->
+        <main class="flex-grow bg-gray-50 flex flex-col p-8 w-full h-full overflow-y-auto z-10 relative">
+            
+            <!-- [sub] 도서 목록 영역 -->
+            <div id="sectionBooks" class="sub-section block">
+                <div class="mb-10">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-5">📖 순범문고 도서 검색/주문</h2>
+                    <div class="flex gap-2.5 max-w-xl">
+                        <input id="searchInput" type="text" oninput="performSearch()" placeholder="도서명 또는 출판사 검색 (예: 로맨스북스)" class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition shadow-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6" id="userBookList">
+                    <!-- Javascript로 도서 목록 렌더링 -->
+                </div>
+            </div>
+            
+            <!-- [sub] 장바구니 영역 -->
+            <div id="sectionCart" class="sub-section hidden bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col max-w-3xl">
+                <div class="p-6 border-b bg-gray-50 flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">🛒 장바구니</h3>
+                    <span id="cartCount" class="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-bold">0건</span>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow bg-white space-y-3 min-h-[300px]" id="cartItems">
+                    <p class="text-center text-gray-500 py-16">장바구니가 비어있습니다.</p>
+                </div>
+                <div class="p-6 border-t bg-gray-50">
+                    <div class="flex justify-between items-center mb-5">
+                        <span class="font-bold text-gray-700">총 결제금액:</span>
+                        <span id="cartTotal" class="text-2xl font-bold text-red-500">0원</span>
+                    </div>
+                    <button onclick="checkout()" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-lg font-bold text-lg transition shadow-sm">
+                        주문 결제하기
+                    </button>
+                </div>
+            </div>
+            
+            <!-- [sub] 내 주문내역 영역 -->
+            <div id="sectionHistory" class="sub-section hidden flex flex-col gap-8 max-w-5xl">
+                <!-- 1. 주문 상세 내역 테이블 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">📦 내 주문 상세 내역</h3>
+                        <span class="text-xs text-gray-500 font-medium">* 주문별 모든 구매 품목을 표시합니다.</span>
+                    </div>
+                    <div class="p-0 overflow-x-auto bg-white min-h-[200px]">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold text-gray-700 text-center">주문번호</th>
+                                    <th class="px-6 py-4 font-semibold text-gray-700">도서명</th>
+                                    <th class="px-6 py-4 font-semibold text-red-500 text-right">단가</th>
+                                    <th class="px-6 py-4 font-semibold text-gray-700 text-center">주문일자</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userOrderHistoryTableBody" class="divide-y divide-gray-100">
+                                <!-- JS로 렌더링 -->
+                            </tbody>
+                        </table>
+                        <div id="emptyOrderMessage" class="hidden text-center text-gray-500 py-16">주문 내역이 없습니다.</div>
+                    </div>
+                </div>
+
+                <!-- 2. 주문별 결제 요약 테이블 (새로 추가된 영역) -->
+                <div id="orderSummarySection" class="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden">
+                    <div class="p-6 border-b bg-purple-50 flex justify-between items-center">
+                        <h3 class="text-xl font-bold text-purple-900 flex items-center gap-2">💰 주문별 결제 요약</h3>
+                        <span class="text-xs text-purple-600 font-bold">총 주문 건수: <span id="summaryOrderCount">0</span>건</span>
+                    </div>
+                    <div class="p-0 overflow-x-auto bg-white">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4 font-bold text-gray-700 text-center">주문번호</th>
+                                    <th class="px-6 py-4 font-bold text-gray-700">대표 품목</th>
+                                    <th class="px-6 py-4 font-bold text-purple-600 text-right">총 결제 금액</th>
+                                    <th class="px-6 py-4 font-bold text-gray-700 text-center">주문일자</th>
+                                    <th class="px-6 py-4 font-bold text-gray-700 text-center">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orderSummaryTableBody" class="divide-y divide-gray-100">
+                                <!-- JS로 렌더링 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 2. 관리자(Admin) 모드 화면 -->
+    <!-- ========================================== -->
+    <section id="adminView" class="hidden flex flex-col min-h-screen w-full bg-gray-50">
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">📚</span>
+                    <h1 class="text-xl font-bold text-gray-900">순범문고 관리자 모드</h1>
+                </div>
+                <button class="px-5 py-2 rounded-lg bg-white border border-gray-200 shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition" onclick="switchMainMode('user')">
+                    👈 고객 화면으로
+                </button>
+            </div>
+        </header>
+        
+        <main class="max-w-7xl mx-auto px-6 py-8 w-full flex-grow">
+            <div class="mb-6 flex justify-between items-end">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">데이터베이스 관리 대시보드</h2>
+                    <p class="text-gray-500 text-sm mt-1">요구사항 정의서에 명시된 테이블 구조 및 제약조건을 반영한 데이터입니다.</p>
+                </div>
+                <div id="adminActionArea">
+                    <button id="btnAddBook" onclick="openBookModal('add')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition shadow-sm">
+                        + 새 도서 등록
+                    </button>
+                </div>
+            </div>
+
+            <!-- 관리자 탭 메뉴 -->
+            <div class="flex border-b mb-6 bg-white rounded-t-lg">
+                <button class="px-6 py-4 tab-active transition" id="tabBook" onclick="switchAdminTab('Book')">도서 관리 (BOOK)</button>
+                <button class="px-6 py-4 tab-inactive transition" id="tabCustomer" onclick="switchAdminTab('Customer')">고객 관리 (CUSTOMER)</button>
+                <button class="px-6 py-4 tab-inactive transition" id="tabOrders" onclick="switchAdminTab('Orders')">주문 관리 (ORDERS)</button>
+            </div>
+
+            <!-- 도서 테이블 -->
+            <div id="adminBook" class="block bg-white rounded-b-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-5 py-4 font-semibold text-gray-700">bookid <span class="badge-pk">PK</span></th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">bookname</th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">publisher</th>
+                            <th class="px-5 py-4 font-semibold text-red-500 text-right">판매가 (price)</th>
+                            <th class="px-5 py-4 font-semibold text-gray-700 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminBookTableBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <!-- 고객 테이블 -->
+            <div id="adminCustomer" class="hidden bg-white rounded-b-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-5 py-4 font-semibold text-gray-700">custid <span class="badge-pk">PK</span></th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">name</th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">address</th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">phone <span class="badge-null">NULL 허용</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminCustomerTableBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <!-- 주문 테이블 -->
+            <div id="adminOrders" class="hidden bg-white rounded-b-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-5 py-4 font-semibold text-gray-700">orderid <span class="badge-pk">PK</span></th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">custid <span class="badge-fk">FK</span><span class="badge-notnull">NOT NULL</span></th>
+                            <th class="px-5 py-4 font-semibold text-gray-700">bookid <span class="badge-fk">FK</span><span class="badge-notnull">NOT NULL</span></th>
+                            <th class="px-5 py-4 font-semibold text-red-500 text-right">saleprice (판매가)</th>
+                            <th class="px-5 py-4 font-semibold text-gray-700 text-center">orderdate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminOrdersTableBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+        </main>
+    </section>
+
+    <!-- 도서 등록/수정 모달 -->
+    <div id="bookModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 modal-overlay" onclick="closeBookModal()"></div>
+        <div class="bg-white rounded-2xl shadow-2xl z-10 w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-6 border-b bg-gray-50 flex justify-between items-center">
+                <h3 id="bookModalTitle" class="text-xl font-bold text-gray-900">도서 정보 관리</h3>
+                <button onclick="closeBookModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">도서 번호 (bookid)</label>
+                    <input id="formBookId" type="number" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="숫자 입력">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">도서명 (bookname)</label>
+                    <input id="formBookName" type="text" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="도서 제목 입력">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">출판사 (publisher)</label>
+                    <input id="formPublisher" type="text" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="출판사명 입력">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1 text-red-500">판매가 (price)</label>
+                    <input id="formPrice" type="number" class="w-full p-2.5 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" placeholder="가격(원) 입력">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">이미지 파일명</label>
+                    <input id="formImage" type="text" class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="예: image_name.jpg">
+                </div>
+            </div>
+            <div class="p-6 border-t bg-gray-50 flex gap-3">
+                <button onclick="closeBookModal()" class="flex-grow py-3 px-4 bg-white border border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-100 transition">취소</button>
+                <button id="btnSaveBook" onclick="saveBook()" class="flex-grow py-3 px-4 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition">저장하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 공통 알림 모달 컨테이너 -->
+    <div id="toastContainer" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2"></div>
+
+    <script>
+        // 전역 상수 선언
+        const DISCOUNT_BOOKS = ['어른점프!', '중2병이라도 사랑이 하고 싶은 나는 오늘도 소꿉친구와 함께 등교한다.'];
+
+        // 초기 데이터 세팅
+        let books = [
+            { bookid: 1, bookname: 'Re.제로부터 시작하는 이세카이 생활입니만?', publisher: '이세계미디어', price: 5900, image: 'image_9c0dd1.jpg' },
+            { bookid: 2, bookname: '중2병이라도 사랑이 하고 싶은 나는 오늘도 소꿉친구와 함께 등교한다.', publisher: '로맨스북스', price: 6900, image: 'image_9b9d2f.jpg' },
+            { bookid: 3, bookname: '어른점프!', publisher: '스포츠사', price: 15000, image: 'image_9b8e0f.jpg' },
+            { bookid: 4, bookname: '나 혼자 회귀했더니 주화입마에 걸린 모두를 구하는 천마가 되어 있었다.', publisher: '무협코믹스', price: 6300, image: 'image_9b1cf6.jpg' }
+        ];
+
+        const customers = [
+            { custid: 1, name: '이름이', address: '대한민국 용인', phone: '010-9278-9802' },
+            { custid: 2, name: '다섯개', address: '대한민국 서울', phone: '010-9101-0111' },
+            { custid: 3, name: '정도라', address: '대한민국 천안', phone: '010-8454-2383' },
+            { custid: 4, name: '여기서', address: '대한민국 인천', phone: '010-5172-5621' },
+            { custid: 5, name: '마무리', address: '대한민국 부산', phone: null } 
+        ];
+
+        // 주문 내역을 빈 배열로 초기화
+        let orders = [];
+
+        let cart = []; 
+        let currentSearchQuery = ''; 
+        let currentModalMode = 'add'; 
+        let currentEditingId = null;
+
+        // ==========================================
+        // UI & 네비게이션 제어
+        // ==========================================
+        function switchMainMode(mode) {
+            const userView = document.getElementById('userView');
+            const adminView = document.getElementById('adminView');
+
+            if (mode === 'user') {
+                userView.classList.remove('hidden');
+                adminView.classList.add('hidden');
+                showUserSection('books');
+            } else {
+                userView.classList.add('hidden');
+                adminView.classList.remove('hidden');
+                renderAdminTables();
+            }
+        }
+
+        function showUserSection(sectionId) {
+            document.querySelectorAll('.sub-section').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('block');
+            });
+            document.getElementById('section' + sectionId.charAt(0).toUpperCase() + sectionId.slice(1)).classList.remove('hidden');
+            document.getElementById('section' + sectionId.charAt(0).toUpperCase() + sectionId.slice(1)).classList.add('block');
+
+            const navButtons = ['books', 'cart', 'history'];
+            navButtons.forEach(id => {
+                const btn = document.getElementById('navBtn-' + id);
+                if (id === sectionId) {
+                    btn.className = "w-full flex items-center justify-between gap-3 text-left p-3.5 rounded-lg bg-purple-50 text-purple-700 font-semibold group transition";
+                } else {
+                    btn.className = "w-full flex items-center justify-between gap-3 text-left p-3.5 rounded-lg text-gray-600 hover:bg-gray-100 group transition";
+                }
+            });
+
+            if (sectionId === 'history') renderOrderHistory();
+            if (sectionId === 'books') renderUserBooks();
+        }
+
+        function switchAdminTab(tabName) {
+            const tabs = ['Book', 'Customer', 'Orders'];
+            tabs.forEach(tab => {
+                document.getElementById('admin' + tab).classList.add('hidden');
+                document.getElementById('admin' + tab).classList.remove('block');
+                const tabBtn = document.getElementById('tab' + tab);
+                tabBtn.classList.remove('tab-active');
+                tabBtn.classList.add('tab-inactive');
+            });
+
+            document.getElementById('admin' + tabName).classList.remove('hidden');
+            document.getElementById('admin' + tabName).classList.add('block');
+            const activeTabBtn = document.getElementById('tab' + tabName);
+            activeTabBtn.classList.remove('tab-inactive');
+            activeTabBtn.classList.add('tab-active');
+
+            const btnAdd = document.getElementById('btnAddBook');
+            if (tabName === 'Book') btnAdd.classList.remove('hidden');
+            else btnAdd.classList.add('hidden');
+        }
+
+        function showToast(msg) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg text-sm font-medium transition-opacity duration-300 mb-2';
+            toast.innerText = msg;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ==========================================
+        // 도서 관리 기능 (CRUD)
+        // ==========================================
+        function openBookModal(mode, id = null) {
+            currentModalMode = mode;
+            currentEditingId = id;
+            const modal = document.getElementById('bookModal');
+            const titleEl = document.getElementById('bookModalTitle');
+            const btnSave = document.getElementById('btnSaveBook');
+            const inputId = document.getElementById('formBookId');
+
+            modal.classList.remove('hidden');
+            
+            if (mode === 'add') {
+                titleEl.innerText = '📖 새 도서 등록';
+                btnSave.innerText = '등록하기';
+                inputId.disabled = false;
+                inputId.value = books.length > 0 ? Math.max(...books.map(b => b.bookid)) + 1 : 1;
+                document.getElementById('formBookName').value = '';
+                document.getElementById('formPublisher').value = '';
+                document.getElementById('formPrice').value = '';
+                document.getElementById('formImage').value = '';
+            } else {
+                titleEl.innerText = '✏️ 도서 정보 수정';
+                btnSave.innerText = '수정 완료';
+                inputId.disabled = true;
+                
+                const book = books.find(b => b.bookid === id);
+                if (book) {
+                    inputId.value = book.bookid;
+                    document.getElementById('formBookName').value = book.bookname;
+                    document.getElementById('formPublisher').value = book.publisher;
+                    document.getElementById('formPrice').value = book.price;
+                    document.getElementById('formImage').value = book.image || '';
+                }
+            }
+        }
+
+        function closeBookModal() {
+            document.getElementById('bookModal').classList.add('hidden');
+        }
+
+        function saveBook() {
+            const bookid = parseInt(document.getElementById('formBookId').value);
+            const bookname = document.getElementById('formBookName').value.trim();
+            const publisher = document.getElementById('formPublisher').value.trim();
+            const price = parseInt(document.getElementById('formPrice').value);
+            const image = document.getElementById('formImage').value.trim();
+
+            if (!bookid || !bookname || !publisher || !price) {
+                return showToast('모든 필수 정보를 입력해주세요.');
+            }
+
+            if (currentModalMode === 'add') {
+                if (books.some(b => b.bookid === bookid)) {
+                    return showToast('중복된 도서 번호(bookid)입니다.');
+                }
+                books.push({ bookid, bookname, publisher, price, image });
+                showToast(`'${bookname}' 도서가 등록되었습니다.`);
+            } else {
+                const index = books.findIndex(b => b.bookid === currentEditingId);
+                if (index !== -1) {
+                    books[index] = { ...books[index], bookname, publisher, price, image };
+                    showToast(`도서 정보가 수정되었습니다.`);
+                }
+            }
+
+            renderAdminTables();
+            renderUserBooks();
+            closeBookModal();
+        }
+
+        function deleteBook(id) {
+            const book = books.find(b => b.bookid === id);
+            if (confirm(`'${book.bookname}' 도서를 삭제하시겠습니까?`)) {
+                books = books.filter(b => b.bookid !== id);
+                showToast('도서가 삭제되었습니다.');
+                renderAdminTables();
+                renderUserBooks();
+            }
+        }
+
+        // ==========================================
+        // 데이터 렌더링
+        // ==========================================
+        function highlightText(text, keyword) {
+            if (!keyword) return text;
+            const safeKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${safeKeyword})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        function performSearch() {
+            currentSearchQuery = document.getElementById('searchInput').value.trim();
+            renderUserBooks();
+        }
+
+        function renderUserBooks() {
+            const container = document.getElementById('userBookList');
+            const filteredBooks = books.filter(book => {
+                if (!currentSearchQuery) return true;
+                const query = currentSearchQuery.toLowerCase();
+                return book.bookname.toLowerCase().includes(query) || 
+                       book.publisher.toLowerCase().includes(query);
+            });
+
+            if (filteredBooks.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">검색 결과가 없습니다.</div>`;
+                return;
+            }
+
+            container.innerHTML = filteredBooks.map(book => {
+                const isDiscounted = DISCOUNT_BOOKS.includes(book.bookname);
+                const salePrice = isDiscounted ? book.price * 0.9 : book.price; 
+                const displayTitle = highlightText(book.bookname, currentSearchQuery);
+                const displayPublisher = highlightText(book.publisher, currentSearchQuery);
+                
+                const imageElement = book.image 
+                    ? `<div class="w-full bg-white rounded-xl mb-4 border border-gray-100 p-1.5 shadow-sm overflow-hidden flex items-center justify-center">
+                           <img src="${book.image}" alt="${book.bookname}" class="w-full h-auto block rounded-lg" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'">
+                       </div>`
+                    : `<div class="w-full h-48 bg-gray-100 rounded-xl mb-4 flex items-center justify-center text-gray-400 text-sm border border-gray-200">이미지 준비중</div>`;
+
+                return `
+                <div class="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-lg transition flex flex-col justify-between">
+                    <div>
+                        ${imageElement}
+                        <div class="text-xs text-purple-600 font-bold mb-1.5">${displayPublisher}</div>
+                        <h3 class="text-lg font-bold mb-3 leading-snug">${displayTitle}</h3>
+                        <p class="text-gray-400 ${isDiscounted ? 'line-through text-sm' : 'text-sm'}">정가: ${book.price.toLocaleString()}원</p>
+                        <p class="text-red-500 font-bold text-xl mb-5">판매가: ${salePrice.toLocaleString()}원</p>
+                    </div>
+                    <button class="w-full bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-100 font-medium py-2.5 rounded-lg transition" onclick="addToCart(${book.bookid})">
+                        🛒 장바구니 담기
+                    </button>
+                </div>
+            `}).join('');
+        }
+
+        function addToCart(bookid) {
+            const book = books.find(b => b.bookid === bookid);
+            if (book) {
+                const isDiscounted = DISCOUNT_BOOKS.includes(book.bookname);
+                const salePrice = isDiscounted ? book.price * 0.9 : book.price;
+                cart.push({ ...book, saleprice: salePrice });
+                updateCartUI();
+                showToast(`'${book.bookname}' 장바구니에 담겼습니다.`);
+            }
+        }
+
+        function updateCartUI() {
+            document.getElementById('sidebarCartCount').innerText = cart.length;
+            document.getElementById('cartCount').innerText = cart.length + '건';
+            const container = document.getElementById('cartItems');
+            const totalEl = document.getElementById('cartTotal');
+            
+            if (cart.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-16">장바구니가 비어있습니다.</p>';
+                totalEl.innerText = '0원';
+                return;
+            }
+
+            let total = 0;
+            container.innerHTML = cart.map((item, index) => {
+                total += item.saleprice;
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                        <div class="flex-grow pr-4">
+                            <p class="font-bold text-gray-800 leading-snug">${item.bookname}</p>
+                            <p class="text-xs text-gray-500 mt-1">${item.publisher}</p>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <p class="text-red-500 font-bold">${item.saleprice.toLocaleString()}원</p>
+                            <button onclick="removeFromCart(${index})" class="text-xs text-gray-400 hover:text-red-500 underline mt-1">삭제</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            totalEl.innerText = total.toLocaleString() + '원';
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCartUI();
+        }
+
+        function checkout() {
+            if(cart.length === 0) return alert('장바구니가 비어있습니다.');
+            let nextOrderId = orders.length > 0 ? Math.max(...orders.map(o => o.orderid)) + 1 : 1;
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            
+            cart.forEach(item => {
+                orders.push({
+                    orderid: nextOrderId, 
+                    custid: 1, 
+                    bookid: item.bookid,
+                    saleprice: item.saleprice,
+                    orderdate: dateStr
+                });
+            });
+            cart = [];
+            updateCartUI();
+            showToast('✅ 결제가 완료되었습니다!');
+            showUserSection('history');
+        }
+
+        function renderOrderHistory() {
+            const tbody = document.getElementById('userOrderHistoryTableBody');
+            const summaryTbody = document.getElementById('orderSummaryTableBody');
+            const summaryCountEl = document.getElementById('summaryOrderCount');
+            const emptyMsg = document.getElementById('emptyOrderMessage');
+            const summarySection = document.getElementById('orderSummarySection');
+            const myOrders = orders.filter(o => o.custid === 1);
+            
+            if(myOrders.length === 0) {
+                tbody.innerHTML = '';
+                summaryTbody.innerHTML = '';
+                summaryCountEl.innerText = '0';
+                emptyMsg.classList.remove('hidden');
+                summarySection.classList.add('hidden');
+                return;
+            }
+
+            emptyMsg.classList.add('hidden');
+            summarySection.classList.remove('hidden');
+
+            // 주문 번호별 그룹화
+            const groupedOrders = {};
+            myOrders.forEach(o => {
+                if (!groupedOrders[o.orderid]) {
+                    groupedOrders[o.orderid] = { items: [], total: 0, date: o.orderdate };
+                }
+                groupedOrders[o.orderid].items.push(o);
+                groupedOrders[o.orderid].total += o.saleprice;
+            });
+
+            // 최신 주문순 정렬
+            const sortedIds = Object.keys(groupedOrders).sort((a, b) => b - a);
+            summaryCountEl.innerText = sortedIds.length;
+
+            // 1. 상세 내역 테이블 렌더링
+            let detailedHtml = "";
+            sortedIds.forEach(orderId => {
+                const group = groupedOrders[orderId];
+                group.items.forEach((item, idx) => {
+                    const book = books.find(b => b.bookid === item.bookid);
+                    detailedHtml += `
+                        <tr class="hover:bg-gray-50 transition border-b border-gray-50">
+                            <td class="px-6 py-4 text-purple-600 font-mono text-center">${idx === 0 ? orderId : ''}</td>
+                            <td class="px-6 py-4 font-medium text-gray-800">${book ? book.bookname : '알 수 없는 도서'}</td>
+                            <td class="px-6 py-4 text-red-500 font-bold text-right">${item.saleprice.toLocaleString()}원</td>
+                            <td class="px-6 py-4 text-gray-500 text-center">${idx === 0 ? group.date : ''}</td>
+                        </tr>
+                    `;
+                });
+            });
+            tbody.innerHTML = detailedHtml;
+
+            // 2. 주문별 결제 요약 테이블 렌더링 (하단 테이블)
+            let summaryHtml = "";
+            sortedIds.forEach(orderId => {
+                const group = groupedOrders[orderId];
+                const firstBook = books.find(b => b.bookid === group.items[0].bookid);
+                const firstBookName = firstBook ? firstBook.bookname : '알 수 없는 도서';
+                const otherCount = group.items.length - 1;
+                const displayTitle = otherCount > 0 ? `${firstBookName} 외 ${otherCount}건` : firstBookName;
+
+                summaryHtml += `
+                    <tr class="hover:bg-purple-50/50 transition">
+                        <td class="px-6 py-4 text-center font-bold text-purple-700 bg-purple-50/30">${orderId}</td>
+                        <td class="px-6 py-4 font-medium text-gray-800">${displayTitle}</td>
+                        <td class="px-6 py-4 text-red-600 font-extrabold text-right text-base">${group.total.toLocaleString()}원</td>
+                        <td class="px-6 py-4 text-gray-500 text-center">${group.date}</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="px-2.5 py-1 bg-green-100 text-green-700 text-[11px] font-bold rounded-full border border-green-200">결제완료</span>
+                        </td>
+                    </tr>
+                `;
+            });
+            summaryTbody.innerHTML = summaryHtml;
+        }
+
+        function renderAdminTables() {
+            // Book Table
+            document.getElementById('adminBookTableBody').innerHTML = books.map(b => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-4 text-purple-600 font-mono">${b.bookid}</td>
+                    <td class="px-5 py-4 font-medium">${b.bookname}</td>
+                    <td class="px-5 py-4 text-gray-600">${b.publisher}</td>
+                    <td class="px-5 py-4 text-red-500 text-right font-bold">${b.price.toLocaleString()}</td>
+                    <td class="px-5 py-4 text-center">
+                        <div class="flex justify-center gap-2">
+                            <button onclick="openBookModal('edit', ${b.bookid})" class="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition">수정</button>
+                            <button onclick="deleteBook(${b.bookid})" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded transition">삭제</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Customer Table
+            document.getElementById('adminCustomerTableBody').innerHTML = customers.map(c => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-4 text-purple-600 font-mono">${c.custid}</td>
+                    <td class="px-5 py-4 font-medium">${c.name}</td>
+                    <td class="px-5 py-4 text-gray-600">${c.address}</td>
+                    <td class="px-5 py-4 ${c.phone === null ? 'text-yellow-500 italic' : 'text-gray-800'}">
+                        ${c.phone === null ? 'NULL' : c.phone}
+                    </td>
+                </tr>
+            `).join('');
+
+            // Orders Table
+            document.getElementById('adminOrdersTableBody').innerHTML = orders.map(o => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-4 text-purple-600 font-mono">${o.orderid}</td>
+                    <td class="px-5 py-4 text-orange-600 font-mono">${o.custid}</td>
+                    <td class="px-5 py-4 text-orange-600 font-mono">${o.bookid}</td>
+                    <td class="px-5 py-4 font-medium text-red-500 text-right">${o.saleprice.toLocaleString()}</td>
+                    <td class="px-5 py-4 text-gray-600 text-center">${o.orderdate}</td>
+                </tr>
+            `).join('');
+        }
+
+        window.onload = () => {
+            renderUserBooks();
+            updateCartUI();
+        };
+    </script>
+</body>
+</html>
